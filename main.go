@@ -20,7 +20,8 @@ func main() {
 	interval := flag.Duration("interval", 1*time.Second, "Sampling interval")
 	flag.Parse()
 
-	collector := NewLinuxCollector() //初始化采集器,自定义的
+	// 使用工厂方法创建采集器 (会根据 OS 编译对应的文件)
+	collector := NewCollector()
 	//启动采集器
 	collector.Start(*interval)
 	defer collector.Stop()
