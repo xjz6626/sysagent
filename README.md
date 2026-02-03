@@ -1,6 +1,6 @@
-# SysAgent - 轻量级 Linux 系统监控探针
+# SysAgent - 轻量级跨平台系统监控探针
 
-这是一个使用 Go 语言编写的轻量级 Linux 系统监控 Agent。它能够实时采集系统的各项核心指标（CPU、内存、磁盘、网络等），并通过内置的 HTTP 服务器展示在一个美观的 Web 仪表盘上。
+这是一个使用 Go 语言编写的轻量级系统监控 Agent，目前支持 **Linux** 和 **Windows** (基础框架)。它能够实时采集系统的各项核心指标（CPU、内存、磁盘、网络等），并通过内置的 HTTP 服务器展示在一个美观的 Web 仪表盘上。
 
 项目旨在学习 Go 语言的**并发模型**、**系统编程**以及**Web 服务开发**。
 
@@ -32,10 +32,12 @@ go build -o sysagent
 
 ```text
 .
-├── main.go             # 程序入口，HTTP 服务与路由配置
-├── collector_linux.go  # 核心业务逻辑：Linux 系统指标采集器
-├── dashboard.html      # 前端界面 (Vue3 + ECharts)
-└── go.mod              # 依赖管理
+├── main.go               # 程序入口，HTTP 服务与路由配置
+├── collector.go          # 定义通用的 Collector 接口与 Metric 结构体
+├── collector_linux.go    # Linux 平台具体实现 (读取 /proc)
+├── collector_windows.go  # Windows 平台具体实现 (骨架)
+├── dashboard.html        # 前端界面 (Vue3 + ECharts)
+└── go.mod                # 依赖管理
 ```
 
 ---
@@ -67,17 +69,23 @@ go build -o sysagent
 #### C. Canvas 图表与前端交互
 -   前端使用 **Vue 3** 进行数据绑定，极大简化了 DOM 操作。
 -   使用 **ECharts** 绘制实时 CPU/内存 波形图。
--   实现了前端轮询机制，前端每秒请求一次 `/metrics` 接口刷新试图。
+-   实现了前端轮询机制，前接口抽象与跨平台)
 
-### 3. 具体实现细节 (collector_linux.go)
-
-项目定义了一个接口 `Collector`，虽然目前只实现了 Linux 版本，但这种设计方便未来扩展 Windows 或 MacOS 版本。
+项目定义了一个通用的 `Collector` 接口，利用 Go 语言的 **Build Tags** (文件名后缀 `_linux.go`, `_windows.go`) 来实现跨平台编译。
 
 ```go
+// collector.go
 type Collector interface {
-    GetMetrics() (*Metric, error)  // 暴露给 HTTP 层的读取方法（加读锁）
-    Start(interval time.Duration)  // 启动后台 Loop
-    Stop()                         // 优雅停止
+    GetMetrics() (*Metric, error)
+    Start(interval time.Duration)
+    Stop()
+}
+```
+
+- **Linux**: 读取 `/proc` 文件系统。
+- **Windows**: (已添加骨架) 预留了 Win32 API 调用位置，使用工厂模式自动适配。
+
+在 `main.go` 中调用工厂方法 `NewCollector()`，编译器会自动选择对应的平台实现。 Stop()                         // 优雅停止
 }
 ```
 
