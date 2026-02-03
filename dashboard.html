@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysAgent // Monitor</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+        /* Header Layout */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 15px;
+        }
+        
+        /* Language Toggle Button */
+        .lang-btn {
+            background: transparent;
+            border: 1px solid var(--text-secondary);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-right: 15px;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        
+        /* Grid Layout */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .card-title {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 10px;
+        }
+        .big-value { font-size: 2rem; font-weight: bold; }
+        .unit { font-size: 1rem; color: var(--text-secondary); }
+        
+        .col-span-2 { grid-column: span 2; }
+        .chart-container { height: 250px; width: 100%; }
+        
+        /* Progress Bar */
+        .progress-bg { background: #334155; height: 6px; border-radius: 3px; margin-top: 10px; overflow: hidden;}
+        .progress-fill { height: 100%; transition: width 0.5s ease; }
+
+        @media (max-width: 768px) {
+            .grid-container { grid-template-columns: 1fr; }
+            .col-span-2 { grid-column: span 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <div>
+                <h1 style="margin:0; font-size: 1.5rem;">
+                    {{ t('title') }} <span style="font-size: 0.8rem; color: var(--text-secondary)">v1.0</span>
+                </h1>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px;">
+                    {{ t('uptime') }}: {{ formatUptime(metrics.uptime_hours) }}
+                </div>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <button class="lang-btn" @click="toggleLang">
+                    {{ currentLang === 'en' ? '中文' : 'English' }}
+                </button>
+                
+                <div style="text-align: right;">
+                    <div class="status-dot"></div> <span style="font-size: 0.8rem;">{{ t('online') }}</span><br>
+                    <span style="font-size: 0.8rem; color: var(--text-secondary)">
+                        {{ metrics.battery_status }} ({{ metrics.battery_percent }}%)
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-container">
+            <div class="card">
+                <div class="card-title">{{ t('cpuLoad') }}</div>
+                <div class="big-value" :style="{color: getColor(metrics.cpu_usage_percent)}">
+                    {{ metrics.cpu_usage_percent.toFixed(1) }}<span class="unit">%</span>
+                </div>
+                <div class="progress-bg">
+                    <div class="progress-fill" :style="{width: metrics.cpu_usage_percent + '%', backgroundColor: getColor(metrics.cpu_usage_percent)}"></div>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary)">
+                    {{ t('temp') }}: {{ metrics.cpu_temp_c }}°C
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">{{ t('memory') }}</div>
+                <div class="big-value" style="color: var(--accent-blue)">
+                    {{ metrics.mem_usage_percent.toFixed(1) }}<span class="unit">%</span>
+                </div>
+                <div class="progress-bg">
+                    <div class="progress-fill" style="background-color: var(--accent-blue)" :style="{width: metrics.mem_usage_percent + '%'}"></div>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary)">
+                    {{ t('swap') }}: {{ metrics.swap_usage_percent.toFixed(1) }}%
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">{{ t('disk') }}</div>
+                <div class="big-value" style="color: var(--accent-orange)">
+                    {{ metrics.disk_free_gb.toFixed(0) }}<span class="unit">GB</span>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary)">
+                    FD: {{ metrics.fd_open }} / {{ formatNumber(metrics.fd_max) }}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">{{ t('loadAvg') }}</div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <span class="big-value">{{ metrics.load_1.toFixed(2) }}</span>
+                    <span style="color: var(--text-secondary)">{{ metrics.load_5.toFixed(2) }}</span>
+                    <span style="color: var(--text-secondary)">{{ metrics.load_15.toFixed(2) }}</span>
+                </div>
+            </div>
+
+            <div class="card col-span-2">
+                <div class="card-title">{{ t('cpuHistory') }}</div>
+                <div id="cpuChart" class="chart-container"></div>
+            </div>
+
+            <div class="card col-span-2">
+                <div class="card-title">{{ t('netTraffic') }}</div>
+                <div id="netChart" class="chart-container"></div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: -20px; padding: 0 10px;">
+                    <span style="color: #10b981">↓ {{ metrics.net_rx_kb.toFixed(1) }} KB/s</span>
+                    <span style="color: #3b82f6">↑ {{ metrics.net_tx_kb.toFixed(1) }} KB/s</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted, computed, watch } = Vue;
+
+        // --- 翻译字典 ---
+        const translations = {
+            en: {
+                title: "SYS_AGENT",
+                uptime: "UPTIME",
+                online: "ONLINE",
+                cpuLoad: "CPU Load",
+                temp: "Temp",
+                memory: "Memory",
+                swap: "Swap",
+                disk: "Disk Free (/)",
+                loadAvg: "Load Avg (1m/5m/15m)",
+                cpuHistory: "CPU Usage History",
+                netTraffic: "Network Traffic (KB/s)",
+                netRx: "RX",
+                netTx: "TX"
+            },
+            zh: {
+                title: "系统监控",
+                uptime: "运行时间",
+                online: "在线",
+                cpuLoad: "CPU 负载",
+                temp: "温度",
+                memory: "内存使用",
+                swap: "交换分区",
+                disk: "剩余空间 (/)",
+                loadAvg: "平均负载 (1/5/15分)",
+                cpuHistory: "CPU 历史趋势",
+                netTraffic: "网络流量 (KB/s)",
+                netRx: "下载",
+                netTx: "上传"
+            }
+        };
+
+        createApp({
+            setup() {
+                // 状态
+                const currentLang = ref(localStorage.getItem('sysagent_lang') || 'en');
+                const metrics = ref({
+                    cpu_usage_percent: 0, mem_usage_percent: 0, swap_usage_percent: 0,
+                    disk_free_gb: 0, load_1: 0, load_5: 0, load_15: 0, uptime_hours: 0,
+                    cpu_temp_c: 0, battery_percent: 0, battery_status: "Unknown",
+                    net_rx_kb: 0, net_tx_kb: 0, fd_open: 0, fd_max: 0
+                });
+
+                // 图表相关
+                let cpuChart = null;
+                let netChart = null;
+                const maxDataPoints = 60;
+                const cpuData = Array(maxDataPoints).fill(0);
+                const netRxData = Array(maxDataPoints).fill(0);
+                const netTxData = Array(maxDataPoints).fill(0);
+
+                // --- 辅助函数 ---
+                const t = (key) => translations[currentLang.value][key];
+                
+                const toggleLang = () => {
+                    currentLang.value = currentLang.value === 'en' ? 'zh' : 'en';
+                    localStorage.setItem('sysagent_lang', currentLang.value);
+                    updateChartLegends(); // 切换语言时更新图表文字
+                };
+
+                const getColor = (val) => {
+                    if (val < 50) return '#10b981';
+                    if (val < 80) return '#f59e0b';
+                    return '#ef4444';
+                };
+
+                const formatUptime = (hours) => {
+                    const h = Math.floor(hours);
+                    const m = Math.floor((hours - h) * 60);
+                    if (currentLang.value === 'zh') return `${h}小时 ${m}分`;
+                    return `${h}h ${m}m`;
+                };
+
+                const formatNumber = (num) => {
+                    if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
+                    if (num > 1000) return (num / 1000).toFixed(1) + 'K';
+                    return num;
+                }
+
+                // --- ECharts 初始化 ---
+                const initCharts = () => {
+                    cpuChart = echarts.init(document.getElementById('cpuChart'));
+                    cpuChart.setOption({
+                        grid: { top: 10, right: 0, bottom: 20, left: 30 },
+                        xAxis: { type: 'category', show: false },
+                        yAxis: { type: 'value', max: 100, splitLine: { lineStyle: { color: '#334155' } } },
+                        series: [{
+                            data: cpuData, type: 'line', smooth: true, showSymbol: false,
+                            lineStyle: { color: '#ef4444' },
+                            areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(239,68,68,0.5)'}, {offset: 1, color: 'rgba(239,68,68,0)'}]) }
+                        }]
+                    });
+
+                    netChart = echarts.init(document.getElementById('netChart'));
+                    // 初始 Option
+                    updateNetChartOption(); 
+                    
+                    window.addEventListener('resize', () => { cpuChart.resize(); netChart.resize(); });
+                };
+
+                // 更新网络图表的配置（用于切换语言）
+                const updateNetChartOption = () => {
+                    if (!netChart) return;
+                    netChart.setOption({
+                        tooltip: { trigger: 'axis' }, // 加上 tooltip 方便看具体数值
+                        legend: { 
+                            data: [t('netRx'), t('netTx')],
+                            textStyle: { color: '#94a3b8' },
+                            top: 0
+                        },
+                        grid: { top: 30, right: 0, bottom: 20, left: 30 },
+                        xAxis: { type: 'category', show: false },
+                        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#334155' } } },
+                        series: [
+                            { name: t('netRx'), data: netRxData, type: 'line', smooth: true, showSymbol: false, lineStyle: { color: '#10b981' }, areaStyle: { opacity: 0.1, color: '#10b981' } },
+                            { name: t('netTx'), data: netTxData, type: 'line', smooth: true, showSymbol: false, lineStyle: { color: '#3b82f6' }, areaStyle: { opacity: 0.1, color: '#3b82f6' } }
+                        ]
+                    });
+                }
+
+                const updateChartLegends = () => {
+                    updateNetChartOption();
+                }
+
+                // --- 数据获取 ---
+                const fetchMetrics = async () => {
+                    try {
+                        const res = await fetch('/metrics');
+                        const data = await res.json();
+                        metrics.value = data;
+
+                        // 更新图表数据
+                        cpuData.shift(); cpuData.push(data.cpu_usage_percent);
+                        cpuChart.setOption({ series: [{ data: cpuData }] });
+
+                        netRxData.shift(); netRxData.push(data.net_rx_kb);
+                        netTxData.shift(); netTxData.push(data.net_tx_kb);
+                        // 注意：这里只更新 data，不更新 name，以免重绘导致闪烁，name 由 updateNetChartOption 负责
+                        netChart.setOption({ series: [{ data: netRxData }, { data: netTxData }] });
+
+                    } catch (e) { console.error(e); }
+                };
+
+                onMounted(() => {
+                    initCharts();
+                    fetchMetrics();
+                    setInterval(fetchMetrics, 1000);
+                });
+
+                return { 
+                    metrics, currentLang, t, toggleLang, 
+                    getColor, formatUptime, formatNumber 
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
